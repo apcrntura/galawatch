@@ -205,7 +205,17 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+const SUPABASE_URL = "https://uftbfpzedfnuruycunby.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmdGJmcHplZGZudXJ1eWN1bmJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3ODI2NjMsImV4cCI6MjEwNjM1ODY2M30.f4uAtU3vQJj4SxGuWkJ2SdC_VAagGqsCXpKuvT4zlV8";
+
+const supabase = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
 const T = Store.thresholds();
 const DESTS = Store.destinations();
 const SES = Auth.require(['tourism','lgu','admin']);
@@ -217,6 +227,104 @@ let markers = {};
 let selected = null;
 let periodMult = 1;
 const PERIOD_LABEL = {"1":"Today","6.2":"This week","24":"This month"};
+// ==========================================
+// APC LIVE SUPABASE DATA
+// ==========================================
+
+async function loadAPCData(){
+  try {
+    const { data, error } = await supabase
+      .from("camera_counts")
+      .select("*")
+      .eq("destination_id", "apc")
+      .single();
+
+    if(error){
+      console.error("APC Supabase error:", error);
+      return;
+    }
+
+    const apc = DESTS.find(d => d.id === "apc");
+
+    if(!apc || !data) return;
+
+    // Use the current camera count as the live visitor count
+    apc.visitors = data.current_inside;
+
+    // Keep these values available for the APC panel
+    apc.peopleIn = data.people_in;
+    apc.peopleOut = data.people_out;
+    apc.currentInside = data.current_inside;
+
+    // Update the APC information
+    apc.alert = "info";
+    apc.alertMsg =
+      `Live camera: ${data.current_inside} people currently inside. ` +
+      `IN: ${data.people_in} · OUT: ${data.people_out}`;
+
+    renderDestList();
+    renderPins();
+
+    if(selected && selected.id === "apc"){
+      renderPanel();
+    }
+
+  } catch(error) {
+    console.error("APC connection error:", error);
+  }
+}
+// ==========================================
+// APC REALTIME UPDATES
+// ==========================================
+
+supabase
+  .channel("apc-camera-counts")
+  .on(
+    "postgres_changes",
+    {
+      event: "UPDATE",
+      schema: "public",
+      table: "camera_counts",
+      filter: "destination_id=eq.apc"
+    },
+    payload => {
+
+      const data = payload.new;
+      const apc = DESTS.find(d => d.id === "apc");
+
+      if(!apc) return;
+
+      apc.visitors = data.current_inside;
+      apc.peopleIn = data.people_in;
+      apc.peopleOut = data.people_out;
+      apc.currentInside = data.current_inside;
+
+      apc.alert = "info";
+      apc.alertMsg =
+        `Live camera: ${data.current_inside} people currently inside. ` +
+        `IN: ${data.people_in} · OUT: ${data.people_out}`;
+
+      renderDestList();
+      renderPins();
+
+      if(selected && selected.id === "apc"){
+        renderPanel();
+      }
+
+      console.log(
+        "APC realtime update:",
+        "IN:", data.people_in,
+        "OUT:", data.people_out,
+        "INSIDE:", data.current_inside
+      );
+    }
+  )
+  .subscribe();
+
+
+// Get the current APC value immediately
+loadAPCData();
+
 
 function capColor(c){ return c>T.high?"#dc2626":c>T.med?"#d97706":"#16a34a"; }
 
@@ -290,11 +398,22 @@ function renderPanel(){
 
   document.getElementById("rpBody").innerHTML = `
     <div class="big-stat">
-      <div class="big-stat-v" style="color:${col}">${d.cap}%</div>
-      <div class="big-stat-l">Current capacity load</div>
-      <div class="big-stat-sub">${visitors.toLocaleString()} visitors</div>
-      <div class="big-stat-l">Cameras: ${cams.filter(c=>c.online).length} of ${cams.length} online</div>
-    </div>
+  <div class="big-stat-v" style="color:${col}">${visitors.toLocaleString()}</div>
+  <div class="big-stat-l">People currently inside</div>
+
+  <div class="big-stat-sub">
+    ${d.peopleIn !== undefined ? `IN: ${d.peopleIn}` : ""}
+    ${d.peopleOut !== undefined ? ` · OUT: ${d.peopleOut}` : ""}
+  </div>
+
+  <div class="big-stat-l">
+    Capacity load: ${d.cap}%
+  </div>
+
+  <div class="big-stat-l">
+    Cameras: ${cams.filter(c=>c.online).length} of ${cams.length} online
+  </div>
+</div>
 
     <div class="sub-head">Visitor trend</div>
     <svg class="trend-svg" viewBox="0 0 240 68" height="68" xmlns="http://www.w3.org/2000/svg">
