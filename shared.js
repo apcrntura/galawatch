@@ -11,7 +11,9 @@ dst('laoag','Laoag City','Ilocos Norte',18.1978,120.5936,14500,44,[9000,10500,11
 dst('banaue','Banaue','Ifugao, CAR',16.9178,121.0589,5200,71,[2800,3400,4000,4600,4900,5100,5200],'warn','Rising density detected. Monitor closely.',2),
 dst('tug','Tuguegarao City','Cagayan Valley',17.6132,121.7270,9800,33,[6000,6800,7200,8000,8800,9400,9800],'info','Low congestion. Strong promotion opportunity.',2),
 dst('bolinao','Bolinao','Pangasinan, Region I',16.3833,119.9000,18500,48,[11000,12500,14000,15500,16800,17500,18500],'ok','Rising trend. Plan infrastructure ahead of peak.',2),
-dst('angeles','Angeles City','Pampanga, Central Luzon',15.1450,120.5887,28500,59,[18000,20000,22000,24000,26000,27500,28500],'ok','Steady growth. Conditions remain stable.',3)];
+dst('angeles','Angeles City','Pampanga, Central Luzon',15.1450,120.5887,28500,59,[18000,20000,22000,24000,26000,27500,28500],'ok','Steady growth. Conditions remain stable.',3),
+dst('apc','Asia Pacific College','Magallanes, Makati City',14.531679632563304,121.02126018205503,0,0,[0,0,0,0,0,0,0],'info','APC live camera is not connected yet.',0)];
+
 const Store={
  get(k,f){try{const v=JSON.parse(localStorage.getItem(k));return v==null?f:v}catch(e){return f}},
  set(k,v){localStorage.setItem(k,JSON.stringify(v))},
