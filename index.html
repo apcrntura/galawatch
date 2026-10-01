@@ -274,7 +274,7 @@ function selectDest(id){
   selected = DESTS.find(d=>d.id===id);
   renderDestList();
   renderPins();
-  map.flyTo([selected.lat,selected.lng],12);
+  map.flyTo([selected.lat,selected.lng], selected.id==='apc' ? 17 : 12);
   renderPanel();
   closeAlerts();
 }
@@ -295,9 +295,9 @@ function renderPins(){
 function renderPanel(){
   const d = selected;
   document.getElementById("rpName").textContent = d.name;
-  document.getElementById("rpSub").textContent = d.region + " · Updated just now";
+  document.getElementById("rpSub").textContent = d.region + (d.updatedAt ? " · Live, updated " + new Date(d.updatedAt).toLocaleTimeString() : " · Updated just now");
   const col = capColor(d.cap);
-  const visitors = Math.round(d.visitors * periodMult);
+  const visitors = d.live ? d.visitors : Math.round(d.visitors * periodMult);
   const cams = d.cameras||[];
 
   const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -442,7 +442,7 @@ renderDestList();
 renderPins();
 renderAlerts();
 updateFilterTag();
-if(DESTS.length) selectDest(DESTS[0].id);
+selectDest('apc');
 </script>
 </body>
 </html>
