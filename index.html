@@ -210,6 +210,7 @@
 <script>
 const SUPABASE_URL = "https://uftbfpzedfnuruycunby.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmdGJmcHplZGZudXJ1eWN1bmJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3ODI2NjMsImV4cCI6MjEwNjM1ODY2M30.f4uAtU3vQJj4SxGuWkJ2SdC_VAagGqsCXpKuvT4zlV8";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const APC_CAPACITY = 100; // change to the real maximum number of people APC can hold
 const APC = {
@@ -219,19 +220,10 @@ const APC = {
   alertMsg:'Waiting for live camera data.',
   cameras:[{name:'APC Camera 1', online:false}]
 };
-const APC_CAPACITY = 100; // change to the real maximum number of people APC can hold
-const APC = {
-  id:'apc', name:'Asia Pacific College', region:'Magallanes, Makati City',
-  lat:14.53177704475846, lng:121.02387739636114, live:true,
-  visitors:0, cap:0, trend:[0,0,0,0,0,0,0], alert:'info',
-  alertMsg:'Waiting for live camera data.',
-  cameras:[{name:'APC Camera 1', online:false}]
-};
-const DESTS = Store.destinations().filter(d => d.id !== 'apc');
-DESTS.push(APC);DESTS.push(APC);
 
 const T = Store.thresholds();
-const DESTS = Store.destinations();
+const DESTS = Store.destinations().filter(d => d.id !== 'apc');
+DESTS.push(APC);
 const SES = Auth.require(['tourism','lgu','admin']);
 const map = L.map('map').setView([16.9,120.7],8);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
@@ -241,6 +233,29 @@ let markers = {};
 let selected = null;
 let periodMult = 1;
 const PERIOD_LABEL = {"1":"Today","6.2":"This week","24":"This month"};
+
+function capColor(c){ return c>T.high?"#dc2626":c>T.med?"#d97706":"#16a34a"; }
+
+function renderDestList(){
+  const el = document.getElementById("destList"); el.innerHTML="";
+  DESTS.forEach(d=>{
+    const col = capColor(d.cap);
+    const div = document.createElement("div");
+    div.className = "dest-item" + (selected&&selected.id===d.id?" active":"");
+    div.innerHTML = `
+      <div class="dest-top">
+        <div class="dest-name">${d.name}</div>
+        <div class="dest-cap" style="color:${col}">${d.cap}%</div>
+      </div>
+      <div class="dest-region">${d.region}</div>
+      <div class="dest-bar-track"><div class="dest-bar-fill" style="background:${col};width:${d.cap}%"></div></div>
+    `;
+    div.onclick = () => selectDest(d.id);
+    el.appendChild(div);
+  });
+}
+
+/* APC live camera data */
 function applyAPC(row){
   const apc = DESTS.find(d => d.id === 'apc');
   if(!apc || !row) return;
@@ -269,7 +284,8 @@ sb.channel('apc-live')
   .subscribe(status => console.log('Realtime status:', status));
 
 loadAPC();
-setInterval(loadAPC, 10000); // backup in case Realtime is off; also refreshes the online status
+setInterval(loadAPC, 10000); // backup if Realtime is off; also refreshes the online status
+
 function selectDest(id){
   selected = DESTS.find(d=>d.id===id);
   renderDestList();
@@ -319,31 +335,35 @@ function renderPanel(){
   const alertClass = d.alert==="warn"?"alert-warn":d.alert==="info"?"alert-info":"alert-ok";
   const alertIcon = d.alert==="warn"?"Warning:":"Status:";
 
-  document.getElementById("rpBody").innerHTML = `
+  const camLine = `<div class="big-stat-l">Cameras: ${cams.filter(c=>c.online).length} of ${cams.length} online</div>`;
+  const statHtml = d.live ? `
     <div class="big-stat">
-  <div class="big-stat-v" style="color:${col}">${visitors.toLocaleString()}</div>
-  <div class="big-stat-l">People currently inside</div>
-
-  <div class="big-stat-sub">
-    ${d.peopleIn !== undefined ? `IN: ${d.peopleIn}` : ""}
-    ${d.peopleOut !== undefined ? ` · OUT: ${d.peopleOut}` : ""}
-  </div>
-
-  <div class="big-stat-l">
-    Capacity load: ${d.cap}%
-  </div>
-
-  <div class="big-stat-l">
-    Cameras: ${cams.filter(c=>c.online).length} of ${cams.length} online
-  </div>
-</div>
-
+      <div class="big-stat-v" style="color:${col}">${visitors.toLocaleString()}</div>
+      <div class="big-stat-l">People currently inside</div>
+      <div class="big-stat-sub">IN: ${d.peopleIn ?? 0} | OUT: ${d.peopleOut ?? 0}</div>
+      <div class="big-stat-l">Capacity load: ${d.cap}%</div>
+      ${camLine}
+    </div>` : `
+    <div class="big-stat">
+      <div class="big-stat-v" style="color:${col}">${d.cap}%</div>
+      <div class="big-stat-l">Current capacity load</div>
+      <div class="big-stat-sub">${visitors.toLocaleString()} visitors</div>
+      ${camLine}
+    </div>`;
+  const trendHtml = d.live ? `
+    <div class="sub-head">Visitor trend</div>
+    <div class="rp-sub">Live camera data. History chart is not connected yet.</div>` : `
     <div class="sub-head">Visitor trend</div>
     <svg class="trend-svg" viewBox="0 0 240 68" height="68" xmlns="http://www.w3.org/2000/svg">
       <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" opacity=".25"/>
       <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-dasharray="4,2"/>
       ${dotsSvg}
-    </svg>
+    </svg>`;
+
+  document.getElementById("rpBody").innerHTML = `
+    ${statHtml}
+
+    ${trendHtml}
 
     <div class="alert-box ${alertClass}">
       <strong>${alertIcon}</strong> ${d.alertMsg}
@@ -412,7 +432,7 @@ document.getElementById("exportBtn").onclick = ()=>{
   const periodLabel = PERIOD_LABEL[periodVal];
   let rows = ["Destination,Region,Capacity Load (%),Est. Visitors,Status"];
   DESTS.forEach(d=>{
-    const visitors = Math.round(d.visitors*periodMult);
+    const visitors = d.live ? d.visitors : Math.round(d.visitors*periodMult);
     const status = d.cap>T.high?"High":d.cap>T.med?"Medium":"Low";
     rows.push(`${d.name},${d.region},${d.cap},${visitors},${status}`);
   });
