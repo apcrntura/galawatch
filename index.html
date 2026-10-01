@@ -211,10 +211,24 @@
 const SUPABASE_URL = "https://uftbfpzedfnuruycunby.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmdGJmcHplZGZudXJ1eWN1bmJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3ODI2NjMsImV4cCI6MjEwNjM1ODY2M30.f4uAtU3vQJj4SxGuWkJ2SdC_VAagGqsCXpKuvT4zlV8";
 
-const supabase = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+const APC_CAPACITY = 100; // change to the real maximum number of people APC can hold
+const APC = {
+  id:'apc', name:'Asia Pacific College', region:'Magallanes, Makati City',
+  lat:14.53177704475846, lng:121.02387739636114, live:true,
+  visitors:0, cap:0, trend:[0,0,0,0,0,0,0], alert:'info',
+  alertMsg:'Waiting for live camera data.',
+  cameras:[{name:'APC Camera 1', online:false}]
+};
+const APC_CAPACITY = 100; // change to the real maximum number of people APC can hold
+const APC = {
+  id:'apc', name:'Asia Pacific College', region:'Magallanes, Makati City',
+  lat:14.53177704475846, lng:121.02387739636114, live:true,
+  visitors:0, cap:0, trend:[0,0,0,0,0,0,0], alert:'info',
+  alertMsg:'Waiting for live camera data.',
+  cameras:[{name:'APC Camera 1', online:false}]
+};
+const DESTS = Store.destinations().filter(d => d.id !== 'apc');
+DESTS.push(APC);DESTS.push(APC);
 
 const T = Store.thresholds();
 const DESTS = Store.destinations();
@@ -227,126 +241,35 @@ let markers = {};
 let selected = null;
 let periodMult = 1;
 const PERIOD_LABEL = {"1":"Today","6.2":"This week","24":"This month"};
-// ==========================================
-// APC LIVE SUPABASE DATA
-// ==========================================
-
-async function loadAPCData(){
-  try {
-    const { data, error } = await supabase
-      .from("camera_counts")
-      .select("*")
-      .eq("destination_id", "apc")
-      .single();
-
-    if(error){
-      console.error("APC Supabase error:", error);
-      return;
-    }
-
-    const apc = DESTS.find(d => d.id === "apc");
-
-    if(!apc || !data) return;
-
-    // Use the current camera count as the live visitor count
-    apc.visitors = data.current_inside;
-
-    // Keep these values available for the APC panel
-    apc.peopleIn = data.people_in;
-    apc.peopleOut = data.people_out;
-    apc.currentInside = data.current_inside;
-
-    // Update the APC information
-    apc.alert = "info";
-    apc.alertMsg =
-      `Live camera: ${data.current_inside} people currently inside. ` +
-      `IN: ${data.people_in} · OUT: ${data.people_out}`;
-
-    renderDestList();
-    renderPins();
-
-    if(selected && selected.id === "apc"){
-      renderPanel();
-    }
-
-  } catch(error) {
-    console.error("APC connection error:", error);
-  }
-}
-// ==========================================
-// APC REALTIME UPDATES
-// ==========================================
-
-supabase
-  .channel("apc-camera-counts")
-  .on(
-    "postgres_changes",
-    {
-      event: "UPDATE",
-      schema: "public",
-      table: "camera_counts",
-      filter: "destination_id=eq.apc"
-    },
-    payload => {
-
-      const data = payload.new;
-      const apc = DESTS.find(d => d.id === "apc");
-
-      if(!apc) return;
-
-      apc.visitors = data.current_inside;
-      apc.peopleIn = data.people_in;
-      apc.peopleOut = data.people_out;
-      apc.currentInside = data.current_inside;
-
-      apc.alert = "info";
-      apc.alertMsg =
-        `Live camera: ${data.current_inside} people currently inside. ` +
-        `IN: ${data.people_in} · OUT: ${data.people_out}`;
-
-      renderDestList();
-      renderPins();
-
-      if(selected && selected.id === "apc"){
-        renderPanel();
-      }
-
-      console.log(
-        "APC realtime update:",
-        "IN:", data.people_in,
-        "OUT:", data.people_out,
-        "INSIDE:", data.current_inside
-      );
-    }
-  )
-  .subscribe();
-
-
-// Get the current APC value immediately
-loadAPCData();
-
-
-function capColor(c){ return c>T.high?"#dc2626":c>T.med?"#d97706":"#16a34a"; }
-
-function renderDestList(){
-  const el = document.getElementById("destList"); el.innerHTML="";
-  DESTS.forEach(d=>{
-    const col = capColor(d.cap);
-    const div = document.createElement("div");
-    div.className = "dest-item" + (selected&&selected.id===d.id?" active":"");
-    div.innerHTML = `
-      <div class="dest-top">
-        <div class="dest-name">${d.name}</div>
-        <div class="dest-cap" style="color:${col}">${d.cap}%</div>
-      </div>
-      <div class="dest-region">${d.region}</div>
-      <div class="dest-bar-track"><div class="dest-bar-fill" style="background:${col};width:${d.cap}%"></div></div>
-    `;
-    div.onclick = () => selectDest(d.id);
-    el.appendChild(div);
-  });
+function applyAPC(row){
+  const apc = DESTS.find(d => d.id === 'apc');
+  if(!apc || !row) return;
+  apc.peopleIn = row.people_in;
+  apc.peopleOut = row.people_out;
+  apc.visitors = row.current_inside;
+  apc.updatedAt = row.updated_at;
+  apc.cap = Math.min(100, Math.round(row.current_inside / APC_CAPACITY * 100));
+  apc.alert = apc.cap > T.high ? 'warn' : 'info';
+  apc.alertMsg = `Live camera: ${row.current_inside} people inside. IN: ${row.people_in} | OUT: ${row.people_out}`;
+  apc.cameras[0].online = (Date.now() - new Date(row.updated_at)) < 60000;
+  renderDestList(); renderPins(); renderAlerts();
+  if(selected && selected.id === 'apc') renderPanel();
 }
 
+async function loadAPC(){
+  const { data, error } = await sb.from('camera_counts').select('*').eq('destination_id','apc').limit(1);
+  if(error) return console.error('APC load error:', error);
+  if(!data.length) return console.warn('No camera_counts row for apc');
+  applyAPC(data[0]);
+}
+
+sb.channel('apc-live')
+  .on('postgres_changes', { event:'*', schema:'public', table:'camera_counts', filter:'destination_id=eq.apc' },
+      p => applyAPC(p.new))
+  .subscribe(status => console.log('Realtime status:', status));
+
+loadAPC();
+setInterval(loadAPC, 10000); // backup in case Realtime is off; also refreshes the online status
 function selectDest(id){
   selected = DESTS.find(d=>d.id===id);
   renderDestList();
